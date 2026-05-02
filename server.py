@@ -201,6 +201,42 @@ def deals():
         return jsonify({"found": False, "error": str(e)})
 
 
+@app.route("/rate", methods=["POST"])
+def rate():
+    import anthropic
+    try:
+        items = request.json.get("items", [])
+        if not items:
+            return jsonify({})
+        list_str = "\n".join(
+            f"{i}: {d['name']} | price: {d.get('price') or 'unknown'} | sale: {d.get('sale_story') or ''}"
+            for i, d in enumerate(items[:40])
+        )
+        prompt = (
+            "You are a grocery deal expert for Atlanta, GA. "
+            "Rate each deal as great, good, or avg based on historical pricing and value. "
+            "Extra weight for organic BOGOs. "
+            "Return ONLY a JSON object like {\"0\":\"great\",\"1\":\"good\",...} no markdown.\n\n"
+            f"Deals:\n{list_str}"
+        )
+        client = anthropic.Anthropic()
+        message = client.messages.create(
+            model="claude-opus-4-5",
+            max_tokens=800,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        text = message.content[0].text
+        import re, json
+        match = re.search(r'\{[\s\S]*\}', text)
+        if not match:
+            return jsonify({})
+        index_ratings = json.loads(match.group())
+        named = {items[int(k)]["name"]: v for k, v in index_ratings.items() if int(k) < len(items)}
+        return jsonify(named)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/health")
 def health():
     return jsonify({"status": "ok"})
