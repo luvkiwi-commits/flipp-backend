@@ -60,16 +60,26 @@ def circular():
         res = requests.get(flyer_url, params=params, headers=HEADERS, timeout=10)
         flyers = res.json() if res.status_code == 200 else []
 
-        # Find matching flyer
+        # Normalize flyer list
+        flyer_list = flyers if isinstance(flyers, list) else flyers.get("flyers", [])
+
+        # Debug: return all merchant names if store not found
+        all_merchants = []
         flyer_id = None
-        for f in (flyers if isinstance(flyers, list) else flyers.get("flyers", [])):
+        for f in flyer_list:
             merchant = (f.get("merchant_name") or f.get("name") or "").lower()
-            if store in merchant:
+            all_merchants.append(merchant)
+            # Fuzzy match — check if any word in store name appears in merchant name
+            if any(word in merchant for word in store.split()):
                 flyer_id = f.get("id") or f.get("flyer_id")
                 break
 
         if not flyer_id:
-            return jsonify({"error": f"No flyer found for {store}", "items": []})
+            return jsonify({
+                "error": f"No flyer found for {store}",
+                "available_stores": all_merchants[:30],
+                "items": []
+            })
 
         # Step 2: get flyer items
         items_url = f"https://backflipp.wishabi.com/flipp/flyers/{flyer_id}/flyer_items"
